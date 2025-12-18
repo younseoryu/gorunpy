@@ -99,6 +99,24 @@ GoRunPy is ideal when you need Python libraries but don't want to manage a separ
 - High-frequency calls — Use gRPC with a persistent Python service
 - Simple logic that could be rewritten in Go
 
+## Examples
+
+| Example | Library | Use Case |
+|---------|---------|----------|
+| [docling](examples/docling/) | Docling | PDF/document to Markdown conversion |
+| [pandas](examples/pandas/) | pandas | CSV analysis, filtering, aggregation |
+| [sentiment](examples/sentiment/) | Transformers | Text sentiment analysis with HuggingFace |
+| [image](examples/image/) | Pillow | Image resize, convert, filter |
+
+```bash
+# Try an example
+cd examples/pandas
+python -m venv .venv && source .venv/bin/activate  # or python3 -m venv .venv
+pip install "gorunpy[build]" pandas jinja2
+gorunpy
+go run .
+```
+
 ## CLI Reference
 
 ### Initialize a new project
@@ -159,7 +177,7 @@ Write Go client to `./pkg/client.go` instead of `gorunpy_client.go`:
 | Deployment          | Single binary            | Separate services     | Single binary       |
 | CGO Required        | ❌ No                     | ❌ No                  | ✅ Yes              |
 | Python Runtime      | Bundled (out-of-process) | Required (service)    | Embedded (in-proc)  |
-| Cross-compilation   | ✅ Easy                   | ✅ Easy                | ❌ Hard             |
+| Cross-compilation   | ⚠️ Limited (Python binary must be built per OS)                  | ✅ Easy                | ❌ Hard             |
 | Typical Latency     | ~200–500 ms              | ~1–10 ms              | ~µs-level           |
 | Throughput          | Low–Medium               | High                  | Very High           |
 | Process Isolation   | ✅ Full                   | ✅ Full                | ❌ Shared memory    |

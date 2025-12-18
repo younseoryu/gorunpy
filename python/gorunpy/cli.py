@@ -358,12 +358,11 @@ def generate_go_client(
         go_ret = py_type_to_go(return_type)
         go_zero = go_zero_value(return_type)
         
-        # Sort params by name for consistent ordering
-        sorted_params = sorted(params.items())
+        # Build parameter list (preserves original Python function order)
+        param_items = list(params.items())
         
-        # Build parameter list
         param_parts = ["ctx context.Context"]
-        for pname, ptype in sorted_params:
+        for pname, ptype in param_items:
             go_pname = to_go_param_name(pname)
             go_ptype = py_type_to_go(ptype)
             param_parts.append(f"{go_pname} {go_ptype}")
@@ -379,7 +378,7 @@ def generate_go_client(
         
         # Args map
         args_parts = []
-        for pname, _ in sorted_params:
+        for pname, _ in param_items:
             go_pname = to_go_param_name(pname)
             args_parts.append(f'"{pname}": {go_pname}')
         lines.append(f"\targs := map[string]any{{{', '.join(args_parts)}}}")
