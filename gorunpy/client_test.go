@@ -40,20 +40,10 @@ func TestCall(t *testing.T) {
 	}
 }
 
-func TestCallRaw(t *testing.T) {
-	c := gorunpy.NewClient(binaryPath(t))
-	result, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": 10, "b": 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.(float64) != 30 {
-		t.Errorf("got %v, want 30", result)
-	}
-}
-
 func TestErrValidation(t *testing.T) {
 	c := gorunpy.NewClient(binaryPath(t))
-	_, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": "bad", "b": 2})
+	var result any
+	err := c.Call(context.Background(), "sum", map[string]any{"a": "bad", "b": 2}, &result)
 	var e *gorunpy.ErrValidation
 	if !errors.As(err, &e) {
 		t.Fatalf("got %T, want ErrValidation", err)
@@ -65,7 +55,8 @@ func TestErrValidation(t *testing.T) {
 
 func TestErrNotFound(t *testing.T) {
 	c := gorunpy.NewClient(binaryPath(t))
-	_, err := c.CallRaw(context.Background(), "nonexistent", map[string]any{})
+	var result any
+	err := c.Call(context.Background(), "nonexistent", map[string]any{}, &result)
 	var e *gorunpy.ErrNotFound
 	if !errors.As(err, &e) {
 		t.Fatalf("got %T, want ErrNotFound", err)
@@ -74,7 +65,8 @@ func TestErrNotFound(t *testing.T) {
 
 func TestErrPython(t *testing.T) {
 	c := gorunpy.NewClient(binaryPath(t))
-	_, err := c.CallRaw(context.Background(), "divide", map[string]any{"a": 1.0, "b": 0.0})
+	var result any
+	err := c.Call(context.Background(), "divide", map[string]any{"a": 1.0, "b": 0.0}, &result)
 	var e *gorunpy.ErrValidation
 	if !errors.As(err, &e) {
 		t.Fatalf("got %T, want ErrValidation", err)
@@ -85,7 +77,8 @@ func TestContextCancel(t *testing.T) {
 	c := gorunpy.NewClient(binaryPath(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := c.CallRaw(ctx, "sum", map[string]any{"a": 1, "b": 2})
+	var result any
+	err := c.Call(ctx, "sum", map[string]any{"a": 1, "b": 2}, &result)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("got %v, want context.Canceled", err)
 	}
@@ -93,7 +86,8 @@ func TestContextCancel(t *testing.T) {
 
 func TestErrProcess(t *testing.T) {
 	c := gorunpy.NewClient("/nonexistent")
-	_, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": 1, "b": 2})
+	var result any
+	err := c.Call(context.Background(), "sum", map[string]any{"a": 1, "b": 2}, &result)
 	var e *gorunpy.ErrProcess
 	if !errors.As(err, &e) {
 		t.Fatalf("got %T, want ErrProcess", err)

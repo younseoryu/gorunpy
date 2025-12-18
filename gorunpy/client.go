@@ -37,13 +37,6 @@ func (c *Client) Call(ctx context.Context, function string, args map[string]any,
 	return c.handle(stdout, stderr, exitCode, result)
 }
 
-// CallRaw invokes a Python function and returns the raw result.
-func (c *Client) CallRaw(ctx context.Context, function string, args map[string]any) (any, error) {
-	var result any
-	err := c.Call(ctx, function, args, &result)
-	return result, err
-}
-
 func (c *Client) exec(ctx context.Context, input []byte) ([]byte, []byte, int, error) {
 	cmd := exec.CommandContext(ctx, c.path)
 	cmd.Stdin = bytes.NewReader(input)

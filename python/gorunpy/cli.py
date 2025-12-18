@@ -301,7 +301,6 @@ def generate_go_client(
     binary_path: str,
     module_name: str,
     module_path: str = "github.com/younseoryu/gorunpy/gorunpy",
-    embed: bool = True,
 ) -> str:
     """Generate Go client code."""
     # Convert module name to PascalCase for Go naming
@@ -310,37 +309,32 @@ def generate_go_client(
     lines = [f"package {package_name}", ""]
     
     # Imports
-    imports = ['"context"']
-    if embed:
-        imports.append('_ "embed"')  # Required for //go:embed directive
-        imports.append('"os"')
-        imports.append('"path/filepath"')
-    imports.append(f'"{module_path}"')
-    
     lines.append("import (")
-    for imp in imports:
-        lines.append(f"\t{imp}")
+    lines.append('\t"context"')
+    lines.append('\t_ "embed"')
+    lines.append('\t"os"')
+    lines.append('\t"path/filepath"')
+    lines.append(f'\t"{module_path}"')
     lines.append(")")
     lines.append("")
     
     # Embed directive and extraction logic
-    if embed:
-        lines.append(f"//go:embed {binary_path}")
-        lines.append("var embeddedBinary []byte")
-        lines.append("")
-        lines.append("var extractedBinaryPath string")
-        lines.append("")
-        lines.append("func init() {")
-        lines.append('\tdir, err := os.MkdirTemp("", "gorunpy-*")')
-        lines.append("\tif err != nil {")
-        lines.append('\t\tpanic("gorunpy: failed to create temp dir: " + err.Error())')
-        lines.append("\t}")
-        lines.append(f'\textractedBinaryPath = filepath.Join(dir, "{Path(binary_path).name}")')
-        lines.append("\tif err := os.WriteFile(extractedBinaryPath, embeddedBinary, 0755); err != nil {")
-        lines.append('\t\tpanic("gorunpy: failed to write binary: " + err.Error())')
-        lines.append("\t}")
-        lines.append("}")
-        lines.append("")
+    lines.append(f"//go:embed {binary_path}")
+    lines.append("var embeddedBinary []byte")
+    lines.append("")
+    lines.append("var extractedBinaryPath string")
+    lines.append("")
+    lines.append("func init() {")
+    lines.append('\tdir, err := os.MkdirTemp("", "gorunpy-*")')
+    lines.append("\tif err != nil {")
+    lines.append('\t\tpanic("gorunpy: failed to create temp dir: " + err.Error())')
+    lines.append("\t}")
+    lines.append(f'\textractedBinaryPath = filepath.Join(dir, "{Path(binary_path).name}")')
+    lines.append("\tif err := os.WriteFile(extractedBinaryPath, embeddedBinary, 0755); err != nil {")
+    lines.append('\t\tpanic("gorunpy: failed to write binary: " + err.Error())')
+    lines.append("\t}")
+    lines.append("}")
+    lines.append("")
     
     # Client struct
     lines.append(f"type {client_name} struct {{")
@@ -349,18 +343,9 @@ def generate_go_client(
     lines.append("")
     
     # NewClient function
-    if embed:
-        lines.append(f"func New{client_name}() *{client_name} {{")
-        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(extractedBinaryPath)}}")
-        lines.append("}")
-        lines.append("")
-        lines.append(f"func New{client_name}WithPath(binaryPath string) *{client_name} {{")
-        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(binaryPath)}}")
-        lines.append("}")
-    else:
-        lines.append(f"func New{client_name}(binaryPath string) *{client_name} {{")
-        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(binaryPath)}}")
-        lines.append("}")
+    lines.append(f"func New{client_name}() *{client_name} {{")
+    lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(extractedBinaryPath)}}")
+    lines.append("}")
     lines.append("")
     
     # Generate method for each function
@@ -431,9 +416,7 @@ def detect_go_package(directory: Path) -> str:
 def gen(
     module_path: Optional[str] = None,
     output_dir: Optional[str] = None,
-    package: Optional[str] = None,
     client_output: Optional[str] = None,
-    no_embed: bool = False,
 ):
     """Main generation command - auto-detect, build, and generate Go client."""
     cwd = Path.cwd()
@@ -476,7 +459,7 @@ def gen(
     print(f"Found {len(functions)} exported function(s)")
     
     # Detect package name
-    go_package = package or detect_go_package(cwd)
+    go_package = detect_go_package(cwd)
     
     # Generate Go client
     relative_binary = binary_path.relative_to(cwd)
@@ -485,7 +468,6 @@ def gen(
         package_name=go_package,
         binary_path=str(relative_binary),
         module_name=module_name,
-        embed=not no_embed,
     )
     
     # Write client
@@ -495,45 +477,8 @@ def gen(
     
     client_type = to_go_name(module_name) + "Client"
     print("\nDone! Usage:")
-    if no_embed:
-        print(f'  client := New{client_type}("{relative_binary}")')
-    else:
-        print(f"  client := New{client_type}()")
+    print(f"  client := New{client_type}()")
     print("  result, err := client.YourFunction(ctx, args...)")
-
-
-# Legacy commands for backwards compatibility
-def build_cmd(module_path: str, output_dir: str, name: Optional[str] = None):
-    """Legacy build command."""
-    module = Path(module_path).resolve()
-    if not module.exists():
-        print(f"Error: {module} does not exist", file=sys.stderr)
-        sys.exit(1)
-    
-    build_binary(module, Path(output_dir).resolve(), name)
-
-
-def run_cmd(binary: str, function: str, args: str = "{}"):
-    """Run a function in a binary."""
-    proc = subprocess.run(
-        [binary],
-        input=json.dumps({"function": function, "args": json.loads(args)}),
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode == 0:
-        print(json.dumps(json.loads(proc.stdout).get("result", {}).get("value"), indent=2))
-    else:
-        print(proc.stderr, file=sys.stderr)
-        sys.exit(proc.returncode)
-
-
-def list_cmd(binary: str):
-    """List functions in a binary."""
-    functions = introspect_binary(Path(binary))
-    for f in functions:
-            params = ", ".join(f"{k}: {v}" for k, v in f["parameters"].items())
-            print(f"{f['name']}({params}) -> {f['return_type']}")
 
 
 def main():
@@ -541,49 +486,17 @@ def main():
         prog="gorunpy",
         description="Build Python modules for Go consumption",
     )
-    sub = parser.add_subparsers(dest="cmd")
-    
-    # Main command: gen (also default if no subcommand)
-    g = sub.add_parser("gen", help="Auto-detect, build, and generate Go client")
-    g.add_argument("module", nargs="?", help="Path to Python module (auto-detected if not specified)")
-    g.add_argument("-o", "--output", help="Output directory for binary (default: .gorunpy/)")
-    g.add_argument("-p", "--package", help="Go package name (auto-detected from .go files)")
-    g.add_argument("--client", help="Output path for Go client (default: gorunpy_client.go)")
-    g.add_argument("--no-embed", action="store_true", help="Don't embed binary in Go code")
-    
-    # Legacy: build
-    b = sub.add_parser("build", help="Build Python module into binary")
-    b.add_argument("module")
-    b.add_argument("-o", "--output", default="./dist")
-    b.add_argument("-n", "--name")
-
-    # Legacy: list
-    l = sub.add_parser("list", help="List functions in a binary")
-    l.add_argument("binary")
-
-    # Legacy: run
-    r = sub.add_parser("run", help="Run a function in a binary")
-    r.add_argument("binary")
-    r.add_argument("function")
-    r.add_argument("args", nargs="?", default="{}")
+    parser.add_argument("module", nargs="?", help="Path to Python module (default: pylib/)")
+    parser.add_argument("-o", "--output", help="Output directory for binary (default: .gorunpy/)")
+    parser.add_argument("--client", help="Output path for Go client (default: gorunpy_client.go)")
 
     args = parser.parse_args()
 
-    # Default to gen if no command specified
-    if args.cmd is None or args.cmd == "gen":
-        gen(
-            module_path=getattr(args, "module", None),
-            output_dir=getattr(args, "output", None),
-            package=getattr(args, "package", None),
-            client_output=getattr(args, "client", None),
-            no_embed=getattr(args, "no_embed", False),
-        )
-    elif args.cmd == "build":
-        build_cmd(args.module, args.output, args.name)
-    elif args.cmd == "list":
-        list_cmd(args.binary)
-    elif args.cmd == "run":
-        run_cmd(args.binary, args.function, args.args)
+    gen(
+        module_path=args.module,
+        output_dir=args.output,
+        client_output=args.client,
+    )
 
 
 if __name__ == "__main__":

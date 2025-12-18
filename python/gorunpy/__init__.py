@@ -73,21 +73,6 @@ class FunctionNotFoundError(GoRunPyError):
         super().__init__(f"function '{function_name}' not found", kind="FunctionNotFoundError")
 
 
-def _is_json_serializable_type(type_hint: Any) -> bool:
-    origin = get_origin(type_hint)
-    if type_hint is type(None) or type_hint in (int, float, str, bool, type(None)) or type_hint is Any:
-        return True
-    if origin is list:
-        args = get_args(type_hint)
-        return not args or _is_json_serializable_type(args[0])
-    if origin is dict:
-        args = get_args(type_hint)
-        return not args or (args[0] is str and _is_json_serializable_type(args[1]))
-    if origin is Union:
-        return all(_is_json_serializable_type(arg) for arg in get_args(type_hint))
-    return False
-
-
 def _validate_value(value: Any, type_hint: Any, field_name: str) -> Any:
     origin = get_origin(type_hint)
 

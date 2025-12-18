@@ -23,7 +23,7 @@ def multiply(a: float, b: float) -> float:
     return a * b
 `
 
-const mainGoTemplate = `//go:generate .gorunpy/venv/bin/gorunpy gen
+const mainGoTemplate = `//go:generate .gorunpy/venv/bin/gorunpy
 
 package main
 

@@ -101,24 +101,49 @@ GoRunPy is ideal when you need Python libraries but don't want to manage a separ
 
 ## CLI Reference
 
+### Initialize a new project
+
 ```bash
-# Generate client (auto-detects Python module)
-.gorunpy/venv/bin/gorunpy gen
+go run github.com/younseoryu/gorunpy/cmd/gorunpy@latest init
+```
 
-# Specify module path
-.gorunpy/venv/bin/gorunpy gen ./mylib
+### Regenerate after changes
 
-# Custom output locations
-.gorunpy/venv/bin/gorunpy gen --output ./bin --client ./client.go
+```bash
+go generate
+```
 
-# Without embedding (requires distributing binary separately)
-.gorunpy/venv/bin/gorunpy gen --no-embed
+### Customizing generation
 
-# List functions in a compiled binary
-.gorunpy/venv/bin/gorunpy list .gorunpy/pylib
+Edit the `//go:generate` line in your `main.go`:
 
-# Test a function directly
-.gorunpy/venv/bin/gorunpy run .gorunpy/pylib add '{"a": 1, "b": 2}'
+**By default, this:**
+- Reads `pylib/`
+- Writes binary to `.gorunpy/pylib`
+- Writes `gorunpy_client.go`
+
+```go
+//go:generate .gorunpy/venv/bin/gorunpy
+```
+
+**Common customizations:**
+
+Read from `./mymodule` instead of `pylib/`:
+
+```go
+//go:generate .gorunpy/venv/bin/gorunpy ./mymodule
+```
+
+Write binary to `./bin` instead of `.gorunpy/` (Go client automatically embeds from there):
+
+```go
+//go:generate .gorunpy/venv/bin/gorunpy -o ./bin
+```
+
+Write Go client to `./pkg/client.go` instead of `gorunpy_client.go`:
+
+```go
+//go:generate .gorunpy/venv/bin/gorunpy --client ./pkg/client.go
 ```
 
 ## How It Works
@@ -131,8 +156,3 @@ GoRunPy is ideal when you need Python libraries but don't want to manage a separ
 ## License
 
 MIT
-
-## TODO
-1. clean up code
-2. make it more convenient (a bit more opinionated?)
-3. Better comments
