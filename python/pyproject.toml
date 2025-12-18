@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gorunpy"
+version = "0.1.0"
+description = "Python SDK for Go-callable typed executables"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+keywords = ["go", "golang", "interop", "rpc", "typed", "pyinstaller"]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pyinstaller>=6.0.0",
+]
+
+[project.scripts]
+gorunpy = "gorunpy.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/younseoryu/gorunpy"
+Repository = "https://github.com/younseoryu/gorunpy"
+Documentation = "https://github.com/younseoryu/gorunpy#readme"
+
+[tool.setuptools.packages.find]
+include = ["gorunpy*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]
+addopts = "-v --tb=short"
+

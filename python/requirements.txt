@@ -1,0 +1,6 @@
+# GoRunPy Python SDK dependencies
+pyinstaller>=6.0.0
+
+# Development dependencies
+pytest>=7.0.0
+
