@@ -1,7 +1,7 @@
 .PHONY: setup generate run clean
 
 setup:
-	pip install -e ../python[build]
+	pip install -e "../python[build]"
 
 generate:
 	go generate

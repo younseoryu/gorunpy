@@ -19,27 +19,79 @@ SKIP_DIRS = {
     "site-packages", ".eggs", "*.egg-info",
 }
 
-MAX_DEPTH_UP = 10
-MAX_DEPTH_DOWN = 10
+MAX_DEPTH_UP = 3
+MAX_DEPTH_DOWN = 3
 
 
-def find_gorunpy_modules(start_dir: Path, max_up: int = MAX_DEPTH_UP, max_down: int = MAX_DEPTH_DOWN) -> List[Path]:
-    """Find Python modules containing @gorunpy.export decorators."""
-    modules = set()
+def find_gorunpy_module(start_dir: Path, max_up: int = MAX_DEPTH_UP, max_down: int = MAX_DEPTH_DOWN) -> Optional[Path]:
+    """Find nearest Python module containing @gorunpy.export decorators."""
+    start = start_dir.resolve()
     
-    # Search upward
-    current = start_dir.resolve()
-    for _ in range(max_up):
-        _scan_directory(current, modules, max_down)
+    # Search starting from current dir, expanding outward
+    # Level 0: current dir only
+    # Level 1: current dir children + parent
+    # Level 2: parent's children + grandparent
+    # etc.
+    
+    dirs_to_check = [start]
+    checked = set()
+    
+    # First check current directory itself
+    if _is_gorunpy_module(start):
+        return start
+    checked.add(start)
+    
+    # Check immediate children of start dir (depth 1 down)
+    module = _search_children(start, checked, max_down)
+    if module:
+        return module
+    
+    # Now expand upward, checking each parent and its children
+    current = start
+    for level in range(max_up):
         parent = current.parent
         if parent == current:  # reached root
             break
+        
+        # Check parent itself
+        if parent not in checked:
+            if _is_gorunpy_module(parent):
+                return parent
+            checked.add(parent)
+        
+        # Check parent's children (siblings of current + their descendants)
+        module = _search_children(parent, checked, max_down)
+        if module:
+            return module
+        
         current = parent
     
-    # Also scan start_dir downward
-    _scan_directory(start_dir.resolve(), modules, max_down)
+    return None
+
+
+def _search_children(directory: Path, checked: set, max_depth: int) -> Optional[Path]:
+    """Search children of directory for gorunpy modules."""
+    if max_depth < 0:
+        return None
     
-    return sorted(modules)
+    try:
+        for child in sorted(directory.iterdir()):  # sorted for deterministic order
+            if child in checked or not child.is_dir() or _should_skip(child):
+                continue
+            
+            checked.add(child)
+            
+            if _is_gorunpy_module(child):
+                return child
+            
+            # Search deeper
+            result = _search_children(child, checked, max_depth - 1)
+            if result:
+                return result
+    except PermissionError:
+        pass
+    
+    return None
 
 
 def _should_skip(path: Path) -> bool:
@@ -56,23 +108,6 @@ def _should_skip(path: Path) -> bool:
     return False
 
 
-def _scan_directory(directory: Path, modules: set, depth: int):
-    """Recursively scan directory for gorunpy modules."""
-    if depth < 0 or not directory.is_dir() or _should_skip(directory):
-        return
-    
-    # Check if this directory is a Python module with @gorunpy.export
-    if _is_gorunpy_module(directory):
-        modules.add(directory)
-        return  # Don't scan inside a module
-    
-    # Scan subdirectories
-    try:
-        for child in directory.iterdir():
-            if child.is_dir():
-                _scan_directory(child, modules, depth - 1)
-    except PermissionError:
-        pass
 
 
 def _is_gorunpy_module(directory: Path) -> bool:
@@ -410,23 +445,15 @@ def gen(
             print("Hint: Make sure it has __init__.py and files with @gorunpy.export", file=sys.stderr)
             sys.exit(1)
     else:
-        # Auto-detect
-        print("Searching for gorunpy modules...")
-        modules = find_gorunpy_modules(cwd)
+        # Auto-detect (searches nearest first, up to 3 levels up/down)
+        print("Searching for gorunpy module...")
+        module_dir = find_gorunpy_module(cwd)
         
-        if not modules:
+        if not module_dir:
             print("Error: No gorunpy module found", file=sys.stderr)
             print("Hint: Create a Python package with @gorunpy.export decorated functions", file=sys.stderr)
             sys.exit(1)
         
-        if len(modules) > 1:
-            print("Error: Multiple gorunpy modules found:", file=sys.stderr)
-            for m in modules:
-                print(f"  - {m}", file=sys.stderr)
-            print("Hint: Specify which one with: gorunpy gen ./path/to/module", file=sys.stderr)
-            sys.exit(1)
-        
-        module_dir = modules[0]
         print(f"Found module: {module_dir}")
     
     module_name = module_dir.name

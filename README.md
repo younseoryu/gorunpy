@@ -7,17 +7,31 @@ client := NewClient()
 result, _ := client.Sum(ctx, 1, 2)  // calls Python, returns 3
 ```
 
-## Install
+## Quick Start
 
+**1. Create project:**
 ```bash
-pip install gorunpy[build]
-go get github.com/younseoryu/gorunpy
+mkdir myproject && cd myproject
+go mod init myproject
 ```
 
-## Usage
+**2. Set up Python environment:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install "gorunpy[build]"
+go get github.com/younseoryu/gorunpy/gorunpy
+```
 
-**1. Write Python** (`mylib/functions.py`):
+> **Note:** Keep the venv activated when running `go generate` — it needs the `gorunpy` CLI.
+
+**3. Write Python** (`mylib/functions.py`):
+```bash
+mkdir mylib && touch mylib/__init__.py
+```
+
 ```python
+# mylib/functions.py
 import gorunpy
 
 @gorunpy.export
@@ -25,12 +39,25 @@ def sum(a: int, b: int) -> int:
     return a + b
 ```
 
-**2. Add to any Go file**:
+**4. Write Go** (`main.go`):
 ```go
 //go:generate gorunpy gen
+
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func main() {
+	client := NewClient()
+	result, _ := client.Sum(context.Background(), 1, 2)
+	fmt.Println(result)  // 3
+}
 ```
 
-**3. Build and run**:
+**5. Run:**
 ```bash
 go generate
 go run .
@@ -42,17 +69,6 @@ That's it! The `gorunpy gen` command:
 - ✅ Builds the Python binary (hidden in `.gorunpy/`)
 - ✅ Generates `gorunpy_client.go` with embedded binary
 - ✅ Creates zero-config `NewClient()` function
-
-## Example
-
-```bash
-cd example
-python3 -m venv venv
-source venv/bin/activate
-pip install -e ../python[build]
-go generate
-go run .
-```
 
 ## Advanced
 
@@ -92,10 +108,12 @@ gorunpy run .gorunpy/mylib sum '{"a": 1, "b": 2}'
 ## Project Structure
 
 ```
-your-project/
+myproject/
+├── venv/                     ← Python virtual environment
 ├── mylib/                    ← Your Python code
 │   ├── __init__.py
 │   └── functions.py          ← @gorunpy.export functions
+├── go.mod
 ├── main.go                   ← //go:generate gorunpy gen
 ├── gorunpy_client.go         ← Generated (embedded binary)
 └── .gorunpy/                 ← Hidden build artifacts
