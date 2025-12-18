@@ -1,6 +1,6 @@
 # GoRunPy
 
-Embed Python's ML, AI, and data science ecosystem into your Go binary with type-safe bindings.
+Embed Python's ML, AI, and data science ecosystem into your Go binary with type-safe bindings. No CGO, no shared libraries, no Python runtime required.
 
 ```python
 @gorunpy.export
