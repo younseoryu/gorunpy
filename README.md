@@ -1,6 +1,7 @@
 # GoRunPy
 
 Embed Python's ML, AI, and data science ecosystem into your Go binary with type-safe bindings. No CGO, no shared libraries, no Python runtime required.
+GoRunPy is ideal when you need Python libraries but don't want to manage a separate Python service. Not ideal for High-frequency, low-latency calls — Use gRPC with a persistent Python service instead.
 
 ```python
 @gorunpy.export
