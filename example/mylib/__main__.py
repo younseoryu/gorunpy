@@ -1,6 +1,0 @@
-import mylib.functions
-import gorunpy
-
-if __name__ == "__main__":
-    gorunpy.main()
-
