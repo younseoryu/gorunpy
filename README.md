@@ -91,7 +91,7 @@ go run .
 GoRunPy is ideal when you need Python libraries but don't want to manage a separate service:
 
 - **Single binary deployment** — Python compiled and embedded; no runtime dependencies
-- **Long-running operations** — ML inference, document processing (~200-300ms call overhead)
+- **Long-running operations** — ML inference, document processing
 - **Complex Python ecosystems** — PyTorch, TensorFlow, Hugging Face, pandas, etc.
 - **Simpler ops** — No separate Python service to deploy or monitor
 
