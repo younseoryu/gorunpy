@@ -7,134 +7,102 @@ import (
 	"os/exec"
 )
 
+// Client calls Python functions in a PyInstaller executable.
 type Client struct {
-	binaryPath string
+	path string
 }
 
-func NewClient(binaryPath string) *Client {
-	return &Client{binaryPath: binaryPath}
+// NewClient creates a client for the Python executable at path.
+func NewClient(path string) *Client {
+	return &Client{path: path}
 }
 
-func (c *Client) BinaryPath() string {
-	return c.binaryPath
-}
-
+// Call invokes a Python function and decodes the result.
+//
+// Example:
+//
+//	var sum int
+//	err := client.Call(ctx, "add", map[string]any{"a": 1, "b": 2}, &sum)
 func (c *Client) Call(ctx context.Context, function string, args map[string]any, result any) error {
-	request := Request{Function: function, Args: args}
-
-	requestJSON, err := json.Marshal(request)
+	reqJSON, err := json.Marshal(request{Function: function, Args: args})
 	if err != nil {
-		return &ErrJSONEncode{Err: err}
+		return &ErrJSON{Op: "encode", Err: err}
 	}
 
-	stdout, stderr, exitCode, err := c.execute(ctx, requestJSON)
+	stdout, stderr, exitCode, err := c.exec(ctx, reqJSON)
 	if err != nil {
 		return err
 	}
 
-	return c.handleResponse(function, stdout, stderr, exitCode, result)
+	return c.handle(stdout, stderr, exitCode, result)
 }
 
-func (c *Client) execute(ctx context.Context, input []byte) (stdout, stderr []byte, exitCode int, err error) {
-	cmd := exec.CommandContext(ctx, c.binaryPath)
+// CallRaw invokes a Python function and returns the raw result.
+func (c *Client) CallRaw(ctx context.Context, function string, args map[string]any) (any, error) {
+	var result any
+	err := c.Call(ctx, function, args, &result)
+	return result, err
+}
+
+func (c *Client) exec(ctx context.Context, input []byte) ([]byte, []byte, int, error) {
+	cmd := exec.CommandContext(ctx, c.path)
 	cmd.Stdin = bytes.NewReader(input)
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	runErr := cmd.Run()
-
-	stdout = stdoutBuf.Bytes()
-	stderr = stderrBuf.Bytes()
+	err := cmd.Run()
 
 	if ctx.Err() != nil {
 		return nil, nil, -1, ctx.Err()
 	}
 
-	if runErr != nil {
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			return nil, nil, -1, &ErrProcessFailed{
-				Message:  runErr.Error(),
-				ExitCode: -1,
-				Stderr:   string(stderr),
-			}
+	if err != nil {
+		if e, ok := err.(*exec.ExitError); ok {
+			return stdout.Bytes(), stderr.Bytes(), e.ExitCode(), nil
 		}
+		return nil, nil, -1, &ErrProcess{Message: err.Error(), ExitCode: -1, Stderr: stderr.String()}
 	}
 
-	return stdout, stderr, exitCode, nil
+	return stdout.Bytes(), stderr.Bytes(), 0, nil
 }
 
-func (c *Client) handleResponse(function string, stdout, stderr []byte, exitCode int, result any) error {
+func (c *Client) handle(stdout, stderr []byte, exitCode int, result any) error {
 	switch exitCode {
-	case ExitCodeSuccess:
-		var response Response
-		if err := json.Unmarshal(stdout, &response); err != nil {
-			return &ErrJSONDecode{Err: err, Output: string(stdout)}
+	case exitSuccess:
+		var resp response
+		if err := json.Unmarshal(stdout, &resp); err != nil {
+			return &ErrJSON{Op: "decode", Err: err, Output: string(stdout)}
 		}
-
-		if !response.OK {
-			return &ErrProcessFailed{
-				Message:  "response indicates failure but exit code was 0",
-				ExitCode: exitCode,
-				Stderr:   string(stderr),
+		if result != nil && resp.Result != nil {
+			b, _ := json.Marshal(resp.Result.Value)
+			if err := json.Unmarshal(b, result); err != nil {
+				return &ErrJSON{Op: "decode", Err: err, Output: string(b)}
 			}
 		}
-
-		if result != nil && response.Result != nil {
-			valueJSON, err := json.Marshal(response.Result.Value)
-			if err != nil {
-				return &ErrJSONDecode{Err: err, Output: string(stdout)}
-			}
-			if err := json.Unmarshal(valueJSON, result); err != nil {
-				return &ErrJSONDecode{Err: err, Output: string(valueJSON)}
-			}
-		}
-
 		return nil
 
-	case ExitCodeHandledError, ExitCodeCrash:
-		var errResp ErrorResponse
-		if err := json.Unmarshal(stderr, &errResp); err != nil {
-			return &ErrProcessFailed{
-				Message:  "failed to parse error response",
-				ExitCode: exitCode,
-				Stderr:   string(stderr),
-			}
+	case exitError, exitCrash:
+		var resp errorResponse
+		if err := json.Unmarshal(stderr, &resp); err != nil {
+			return &ErrProcess{Message: "invalid error response", ExitCode: exitCode, Stderr: string(stderr)}
+		}
+		if resp.Error == nil {
+			return &ErrProcess{Message: "missing error details", ExitCode: exitCode, Stderr: string(stderr)}
 		}
 
-		if errResp.Error == nil {
-			return &ErrProcessFailed{
-				Message:  "error response missing error details",
-				ExitCode: exitCode,
-				Stderr:   string(stderr),
-			}
+		e := resp.Error
+		switch e.Kind {
+		case "ValidationError", "TypeError":
+			return &ErrValidation{Message: e.Message, Field: e.Field}
+		case "FunctionNotFoundError":
+			return &ErrNotFound{Function: e.Message}
+		default:
+			return &ErrPython{Kind: e.Kind, Message: e.Message, Crash: exitCode == exitCrash}
 		}
-
-		pyErr := &PythonError{
-			Kind:         ErrorKind(errResp.Error.Kind),
-			Message:      errResp.Error.Message,
-			Field:        errResp.Error.Field,
-			FunctionName: function,
-		}
-
-		return mapPythonError(pyErr, exitCode)
 
 	default:
-		return &ErrProcessFailed{
-			Message:  "unknown exit code",
-			ExitCode: exitCode,
-			Stderr:   string(stderr),
-		}
+		return &ErrProcess{Message: "unknown exit code", ExitCode: exitCode, Stderr: string(stderr)}
 	}
-}
-
-func (c *Client) CallRaw(ctx context.Context, function string, args map[string]any) (any, error) {
-	var result any
-	if err := c.Call(ctx, function, args, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
 }

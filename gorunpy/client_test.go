@@ -10,102 +10,92 @@ import (
 	"github.com/younseoryu/gorunpy/gorunpy"
 )
 
-func testBinaryPath(t *testing.T) string {
+func binaryPath(t *testing.T) string {
 	t.Helper()
-	if path := os.Getenv("GORUNPY_TEST_BINARY"); path != "" {
-		return path
+	if p := os.Getenv("GORUNPY_TEST_BINARY"); p != "" {
+		return p
 	}
 	wd, _ := os.Getwd()
-	candidates := []string{
-		filepath.Join(wd, "..", "example", "dist", "mathlib"),
-		filepath.Join(wd, "example", "dist", "mathlib"),
-	}
-	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
-			return path
+	for _, p := range []string{
+		filepath.Join(wd, "..", "example", "dist", "mylib"),
+		filepath.Join(wd, "example", "dist", "mylib"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
 		}
 	}
 	t.Skip("test binary not found")
 	return ""
 }
 
-func TestClientCallRaw(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
-	result, err := client.CallRaw(context.Background(), "sum", map[string]any{"a": 1, "b": 2})
-	if err != nil {
-		t.Fatalf("CallRaw failed: %v", err)
-	}
-	if val, ok := result.(float64); !ok || val != 3 {
-		t.Errorf("expected 3, got %v", result)
-	}
-}
-
-func TestClientCall(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
+func TestCall(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
 	var result int
-	err := client.Call(context.Background(), "sum", map[string]any{"a": 10, "b": 20}, &result)
+	err := c.Call(context.Background(), "sum", map[string]any{"a": 1, "b": 2}, &result)
 	if err != nil {
-		t.Fatalf("Call failed: %v", err)
+		t.Fatal(err)
 	}
-	if result != 30 {
-		t.Errorf("expected 30, got %d", result)
+	if result != 3 {
+		t.Errorf("got %d, want 3", result)
 	}
 }
 
-func TestTypeMismatchError(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
-	_, err := client.CallRaw(context.Background(), "sum", map[string]any{"a": "not an int", "b": 2})
-	if err == nil {
-		t.Fatal("expected error")
+func TestCallRaw(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
+	result, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": 10, "b": 20})
+	if err != nil {
+		t.Fatal(err)
 	}
-	var e *gorunpy.ErrInvalidInput
+	if result.(float64) != 30 {
+		t.Errorf("got %v, want 30", result)
+	}
+}
+
+func TestErrValidation(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
+	_, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": "bad", "b": 2})
+	var e *gorunpy.ErrValidation
 	if !errors.As(err, &e) {
-		t.Errorf("expected ErrInvalidInput, got %T", err)
+		t.Fatalf("got %T, want ErrValidation", err)
+	}
+	if e.Field != "a" {
+		t.Errorf("field = %q, want %q", e.Field, "a")
 	}
 }
 
-func TestFunctionNotFoundError(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
-	_, err := client.CallRaw(context.Background(), "nonexistent", map[string]any{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	var e *gorunpy.ErrInvalidInput
+func TestErrNotFound(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
+	_, err := c.CallRaw(context.Background(), "nonexistent", map[string]any{})
+	var e *gorunpy.ErrNotFound
 	if !errors.As(err, &e) {
-		t.Errorf("expected ErrInvalidInput, got %T", err)
+		t.Fatalf("got %T, want ErrNotFound", err)
 	}
 }
 
-func TestValidationError(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
-	_, err := client.CallRaw(context.Background(), "divide", map[string]any{"a": 10.0, "b": 0.0})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	var e *gorunpy.ErrInvalidInput
+func TestErrPython(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
+	_, err := c.CallRaw(context.Background(), "divide", map[string]any{"a": 1.0, "b": 0.0})
+	var e *gorunpy.ErrValidation
 	if !errors.As(err, &e) {
-		t.Errorf("expected ErrInvalidInput, got %T", err)
+		t.Fatalf("got %T, want ErrValidation", err)
 	}
 }
 
-func TestContextCancellation(t *testing.T) {
-	client := gorunpy.NewClient(testBinaryPath(t))
+func TestContextCancel(t *testing.T) {
+	c := gorunpy.NewClient(binaryPath(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := client.CallRaw(ctx, "sum", map[string]any{"a": 1, "b": 2})
+	_, err := c.CallRaw(ctx, "sum", map[string]any{"a": 1, "b": 2})
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got %v", err)
+		t.Errorf("got %v, want context.Canceled", err)
 	}
 }
 
-func TestInvalidBinaryPath(t *testing.T) {
-	client := gorunpy.NewClient("/nonexistent")
-	_, err := client.CallRaw(context.Background(), "sum", map[string]any{"a": 1, "b": 2})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	var e *gorunpy.ErrProcessFailed
+func TestErrProcess(t *testing.T) {
+	c := gorunpy.NewClient("/nonexistent")
+	_, err := c.CallRaw(context.Background(), "sum", map[string]any{"a": 1, "b": 2})
+	var e *gorunpy.ErrProcess
 	if !errors.As(err, &e) {
-		t.Errorf("expected ErrProcessFailed, got %T", err)
+		t.Fatalf("got %T, want ErrProcess", err)
 	}
 }

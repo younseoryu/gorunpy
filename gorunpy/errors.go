@@ -2,115 +2,83 @@ package gorunpy
 
 import "fmt"
 
-type ErrorKind string
+// Error types returned by Client methods.
+//
+// Use errors.As() to check error types:
+//
+//	var e *gorunpy.ErrValidation
+//	if errors.As(err, &e) {
+//	    fmt.Println(e.Field, e.Message)
+//	}
 
-const (
-	ErrorKindValidation       ErrorKind = "ValidationError"
-	ErrorKindType             ErrorKind = "TypeError"
-	ErrorKindFunctionNotFound ErrorKind = "FunctionNotFoundError"
-	ErrorKindRuntime          ErrorKind = "RuntimeError"
-)
-
-type PythonError struct {
-	Kind         ErrorKind `json:"kind"`
-	Message      string    `json:"message"`
-	Field        string    `json:"field,omitempty"`
-	FunctionName string    `json:"-"`
+// ErrValidation is returned when input validation fails.
+// This includes type mismatches, missing arguments, and
+// validation errors raised by Python code.
+type ErrValidation struct {
+	Message string // Error message
+	Field   string // Which field failed (optional)
 }
 
-func (e *PythonError) Error() string {
+func (e *ErrValidation) Error() string {
 	if e.Field != "" {
-		return fmt.Sprintf("%s: %s (field: %s, function: %s)", e.Kind, e.Message, e.Field, e.FunctionName)
+		return fmt.Sprintf("validation error: %s (field: %s)", e.Message, e.Field)
 	}
-	return fmt.Sprintf("%s: %s (function: %s)", e.Kind, e.Message, e.FunctionName)
+	return fmt.Sprintf("validation error: %s", e.Message)
 }
 
-type ErrInvalidInput struct {
-	*PythonError
+// ErrNotFound is returned when the requested function doesn't exist.
+type ErrNotFound struct {
+	Function string // Function name that was not found
 }
 
-func (e *ErrInvalidInput) Error() string {
-	return fmt.Sprintf("invalid input: %s", e.PythonError.Error())
+func (e *ErrNotFound) Error() string {
+	return fmt.Sprintf("function not found: %s", e.Function)
 }
 
-func (e *ErrInvalidInput) Unwrap() error {
-	return e.PythonError
+// ErrPython is returned when Python code raises an exception.
+// This includes both handled errors and unhandled crashes.
+type ErrPython struct {
+	Kind    string // Exception type (e.g., "ValueError", "RuntimeError")
+	Message string // Error message
+	Crash   bool   // True if this was an unhandled exception
 }
 
-type ErrUserCode struct {
-	*PythonError
+func (e *ErrPython) Error() string {
+	if e.Crash {
+		return fmt.Sprintf("python crash [%s]: %s", e.Kind, e.Message)
+	}
+	return fmt.Sprintf("python error [%s]: %s", e.Kind, e.Message)
 }
 
-func (e *ErrUserCode) Error() string {
-	return fmt.Sprintf("user code error: %s", e.PythonError.Error())
+// ErrProcess is returned when the Python process fails to execute.
+// This includes binary not found, permission errors, timeouts, etc.
+type ErrProcess struct {
+	Message  string // What went wrong
+	ExitCode int    // Process exit code (-1 if unknown)
+	Stderr   string // Stderr output (if any)
 }
 
-func (e *ErrUserCode) Unwrap() error {
-	return e.PythonError
-}
-
-type ErrRuntimeCrash struct {
-	*PythonError
-}
-
-func (e *ErrRuntimeCrash) Error() string {
-	return fmt.Sprintf("runtime crash: %s", e.PythonError.Error())
-}
-
-func (e *ErrRuntimeCrash) Unwrap() error {
-	return e.PythonError
-}
-
-type ErrProcessFailed struct {
-	Message  string
-	ExitCode int
-	Stderr   string
-}
-
-func (e *ErrProcessFailed) Error() string {
+func (e *ErrProcess) Error() string {
 	if e.Stderr != "" {
-		return fmt.Sprintf("process failed (exit %d): %s: %s", e.ExitCode, e.Message, e.Stderr)
+		return fmt.Sprintf("process error (exit %d): %s: %s", e.ExitCode, e.Message, e.Stderr)
 	}
-	return fmt.Sprintf("process failed (exit %d): %s", e.ExitCode, e.Message)
+	return fmt.Sprintf("process error (exit %d): %s", e.ExitCode, e.Message)
 }
 
-type ErrJSONEncode struct {
-	Err error
+// ErrJSON is returned when JSON encoding/decoding fails.
+type ErrJSON struct {
+	Op     string // "encode" or "decode"
+	Err    error  // Underlying error
+	Output string // Raw output (for decode errors)
 }
 
-func (e *ErrJSONEncode) Error() string {
-	return fmt.Sprintf("failed to encode input to JSON: %v", e.Err)
-}
-
-func (e *ErrJSONEncode) Unwrap() error {
-	return e.Err
-}
-
-type ErrJSONDecode struct {
-	Err    error
-	Output string
-}
-
-func (e *ErrJSONDecode) Error() string {
-	return fmt.Sprintf("failed to decode output JSON: %v (output: %s)", e.Err, e.Output)
-}
-
-func (e *ErrJSONDecode) Unwrap() error {
-	return e.Err
-}
-
-func mapPythonError(pyErr *PythonError, exitCode int) error {
-	switch exitCode {
-	case ExitCodeHandledError:
-		switch pyErr.Kind {
-		case ErrorKindValidation, ErrorKindType, ErrorKindFunctionNotFound:
-			return &ErrInvalidInput{PythonError: pyErr}
-		default:
-			return &ErrUserCode{PythonError: pyErr}
-		}
-	case ExitCodeCrash:
-		return &ErrRuntimeCrash{PythonError: pyErr}
-	default:
-		return &ErrRuntimeCrash{PythonError: pyErr}
+func (e *ErrJSON) Error() string {
+	if e.Output != "" {
+		return fmt.Sprintf("json %s error: %v (output: %s)", e.Op, e.Err, e.Output)
 	}
+	return fmt.Sprintf("json %s error: %v", e.Op, e.Err)
+}
+
+func (e *ErrJSON) Unwrap() error {
+	return e.Err
 }

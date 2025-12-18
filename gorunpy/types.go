@@ -1,31 +1,35 @@
 package gorunpy
 
+// Exit codes from Python executable.
 const (
-	ExitCodeSuccess      = 0
-	ExitCodeHandledError = 1
-	ExitCodeCrash        = 2
+	exitSuccess = 0 // Success
+	exitError   = 1 // Handled error (validation, user error)
+	exitCrash   = 2 // Unhandled exception
 )
 
-type Request struct {
+// Request sent to Python.
+type request struct {
 	Function string         `json:"function"`
 	Args     map[string]any `json:"args"`
 }
 
-type Response struct {
-	OK     bool         `json:"ok"`
-	Result *ResultValue `json:"result,omitempty"`
+// Response from Python (success).
+type response struct {
+	OK     bool   `json:"ok"`
+	Result *value `json:"result,omitempty"`
 }
 
-type ResultValue struct {
+type value struct {
 	Value any `json:"value"`
 }
 
-type ErrorResponse struct {
+// Response from Python (error).
+type errorResponse struct {
 	OK    bool         `json:"ok"`
-	Error *ErrorDetail `json:"error,omitempty"`
+	Error *errorDetail `json:"error,omitempty"`
 }
 
-type ErrorDetail struct {
+type errorDetail struct {
 	Kind    string `json:"kind"`
 	Message string `json:"message"`
 	Field   string `json:"field,omitempty"`
