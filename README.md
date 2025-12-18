@@ -2,26 +2,74 @@
 
 Embed Python’s ML, AI, and data-science ecosystem directly into your Go binary with type-safe bindings. No CGO, no shared libraries, no Python runtime required.
 
-GoRunPy is ideal when you want to have Go as your primary system language but you want to call into Python for AI/ML or data workloads without operating a separate Python service. It’s designed for workloads where Python does meaningful work and sub-second call latency is acceptable.
-
-It’s not intended for high-frequency, ultra-low-latency RPC. For those cases, use gRPC with a separate Python service instead.
-
 ```python
 @gorunpy.export
-def sum(a: int, b: int) -> int:
+def add(a: int, b: int) -> int:
     return a + b
 ```
 
 ```go
-ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-defer cancel()
-
-client := NewMylibClient()
-result, err := client.Sum(ctx, 1, 2)
-if err != nil {
-    log.Fatal(err)
-}
+client := NewPylibClient()
+result, _ := client.Add(ctx, 1, 2)
 fmt.Println(result) // 3
+```
+
+GoRunPy is ideal when you want to have Go as your primary system language but you want to call into Python for AI/ML or data workloads without operating a separate Python service. It’s designed for workloads where Python does meaningful work and sub-second call latency is acceptable.
+
+It’s not intended for high-frequency, ultra-low-latency RPC. For those cases, use gRPC with a separate Python service instead.
+
+## Quick Start
+
+```bash
+mkdir myproject && cd myproject
+go mod init myproject
+go run github.com/younseoryu/gorunpy/cmd/gorunpy@latest init
+```
+
+This creates:
+- `.gorunpy/venv/` — Python environment with `gorunpy[build]`
+- `pylib/calc.py` — Example Python functions
+- `main.go` — Go code with `//go:generate`
+
+Run it:
+
+```bash
+go generate && go run .
+```
+
+Output:
+```
+2 + 3 = 5
+2.5 * 4.0 = 10.0
+```
+
+## Making Changes
+
+Edit `pylib/calc.py` to add a new function:
+
+```python
+@gorunpy.export
+def subtract(a: int, b: int) -> int:
+    return a - b
+```
+
+Regenerate the client:
+
+```bash
+go generate
+```
+
+Use it in `main.go`:
+
+```go
+diff, _ := client.Subtract(ctx, 10, 3)
+fmt.Printf("10 - 3 = %d\n", diff)
+```
+
+Run:
+
+```bash
+go run .
 ```
 
 ## Supported Types
@@ -37,54 +85,45 @@ fmt.Println(result) // 3
 | `Optional[T]` | `*T` |
 | `None` | (no return value) |
 
-## Quick Start
+## When to Use
 
-**1. Create project:**
+GoRunPy is ideal when you need Python libraries but don't want to manage a separate service:
+
+- **Single binary deployment** — Python compiled and embedded; no runtime dependencies
+- **Long-running operations** — ML inference, document processing (~200-300ms call overhead)
+- **Complex Python ecosystems** — PyTorch, TensorFlow, Hugging Face, pandas, etc.
+- **Simpler ops** — No separate Python service to deploy or monitor
+
+**Not ideal for:**
+- High-frequency calls — Use gRPC with a persistent Python service
+- Simple logic that could be rewritten in Go
+
+## Manual Setup
+
+If you prefer manual setup:
+
 ```bash
-# Create and enter project directory
+# Create project
 mkdir myproject && cd myproject
-
-# Initialize Go module
 go mod init myproject
-```
 
-**2. Set up Python environment:**
-```bash
-# Create virtual environment
-python3 -m venv venv
+# Python environment
+python3 -m venv .gorunpy/venv
+.gorunpy/venv/bin/pip install "gorunpy[build]"
 
-# Activate it
-source venv/bin/activate
-
-# Install gorunpy with build dependencies
-pip install "gorunpy[build]"
-
-# Add Go dependency
-go get github.com/younseoryu/gorunpy/gorunpy
-```
-
-> **Note:** Keep the venv activated when running `go generate` — it needs the `gorunpy` CLI.
-
-**3. Write Python:**
-```bash
 # Create Python package
-mkdir mylib && touch mylib/__init__.py
-
-# Create functions file with @gorunpy.export decorator
-cat > mylib/functions.py << 'EOF'
+mkdir pylib && touch pylib/__init__.py
+cat > pylib/calc.py << 'EOF'
 import gorunpy
 
 @gorunpy.export
-def sum(a: int, b: int) -> int:
+def add(a: int, b: int) -> int:
     return a + b
 EOF
-```
 
-**4. Write Go:**
-```bash
-# Create main.go with go:generate directive
+# Create main.go
 cat > main.go << 'EOF'
-//go:generate gorunpy gen
+//go:generate .gorunpy/venv/bin/gorunpy gen
 
 package main
 
@@ -94,89 +133,45 @@ import (
 )
 
 func main() {
-	client := NewMylibClient()
-	result, _ := client.Sum(context.Background(), 1, 2)
-	fmt.Println(result) // 3
+	client := NewPylibClient()
+	result, _ := client.Add(context.Background(), 1, 2)
+	fmt.Println(result)
 }
 EOF
+
+# Add dependency and run
+go get github.com/younseoryu/gorunpy/gorunpy
+go generate && go run .
 ```
 
-**5. Run:**
+## CLI Reference
+
 ```bash
-# Build Python binary + generate gorunpy_client.go
-go generate
+# Generate client (auto-detects Python module)
+.gorunpy/venv/bin/gorunpy gen
 
-# Run the program
-go run .
-```
+# Specify module path
+.gorunpy/venv/bin/gorunpy gen ./mylib
 
-The `gorunpy gen` command handles the entire build pipeline:
-- Auto-detects Python modules with `@gorunpy.export` (searches 3 levels up/down)
-- Generates `__main__.py` entry point if missing
-- Compiles Python to standalone binary via PyInstaller (output: `.gorunpy/`)
-- Generates `gorunpy_client.go` with type-safe wrappers and embedded binary
+# Custom output locations
+.gorunpy/venv/bin/gorunpy gen --output ./bin --client ./client.go
 
-## Advanced
+# Without embedding (requires distributing binary separately)
+.gorunpy/venv/bin/gorunpy gen --no-embed
 
-### Specify module path
-```bash
-# Use specific module instead of auto-detect
-gorunpy gen ./path/to/mylib
-```
+# List functions in a compiled binary
+.gorunpy/venv/bin/gorunpy list .gorunpy/pylib
 
-### Custom output locations
-```bash
-gorunpy gen --output ./bin --client ./pkg/client.go
-```
-
-### Without embedding (separate binary)
-```bash
-# Binary not embedded, must distribute separately
-gorunpy gen --no-embed
-```
-
-### List functions in a binary
-```bash
-# Show available functions and signatures
-gorunpy list .gorunpy/mylib
-```
-
-### Run a function directly
-```bash
-# Test without Go
-gorunpy run .gorunpy/mylib sum '{"a": 1, "b": 2}'
+# Test a function directly
+.gorunpy/venv/bin/gorunpy run .gorunpy/pylib add '{"a": 1, "b": 2}'
 ```
 
 ## How It Works
 
-1. **Detection**: Scans for Python packages with `@gorunpy.export` decorated functions
-2. **Build**: Uses PyInstaller to create a standalone binary
-3. **Introspection**: Queries the binary for function signatures
-4. **Generation**: Creates Go client code with type-safe wrappers
-5. **Embedding**: Binary is embedded via `//go:embed` for single-binary distribution
-
-## Generated Files
-
-After running `go generate` (with venv activated), your project will contain:
-
-```
-myproject/
-├── gorunpy_client.go         ← Generated client with embedded binary
-└── .gorunpy/
-    └── mylib                 ← Compiled Python binary
-```
-
-## When to Use
-
-GoRunPy is ideal when you need Python libraries but don't want to manage a separate Python service:
-- **Single binary deployment** — Python is compiled and embedded; no Python installation or sidecar service required
-- **Long-running operations** — ML inference, document processing, data analysis where ~200-300ms call overhead is negligible
-- **Complex Python ecosystems** — PyTorch, TensorFlow, Hugging Face, docling, pandas, etc.
-- **Simpler ops** — No Python service to deploy, monitor, or scale separately
-
-**Not ideal for:**
-- High-frequency, low-latency calls — Use gRPC with a persistent Python service instead
-- Simple operations that could be rewritten in Go
+1. **Detection** — Finds Python packages with `@gorunpy.export`
+2. **Build** — Compiles to standalone binary via PyInstaller
+3. **Introspection** — Extracts function signatures
+4. **Generation** — Creates type-safe Go client with `//go:embed`
 
 ## License
 
