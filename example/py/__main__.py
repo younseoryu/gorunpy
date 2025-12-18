@@ -1,4 +1,4 @@
-import mylib.functions
+import py.functions
 import gorunpy
 
 if __name__ == "__main__":

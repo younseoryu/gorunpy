@@ -31,5 +31,6 @@ def get_stats(numbers: List[float]) -> Dict[str, float]:
     if not numbers:
         raise gorunpy.ValidationError("empty list", field="numbers")
     total = builtin_sum(numbers)
-    return {"sum": total, "count": float(len(numbers)), "mean": total / len(numbers)}
+    count = len(numbers)
+    return {"sum": total, "count": float(count), "mean": total / count}
 

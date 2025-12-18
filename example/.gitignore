@@ -1,7 +1,9 @@
 venv/
 dist/
 .build/
+.gorunpy/
 client.go
+gorunpy_client.go
 go.sum
 __pycache__/
 

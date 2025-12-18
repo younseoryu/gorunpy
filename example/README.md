@@ -31,12 +31,20 @@ Error: division by zero
 
 ```
 example/
-├── mylib/           ← Your Python code
+├── mylib/               ← Your Python code
 │   ├── __init__.py
-│   ├── __main__.py
-│   └── functions.py
-├── main.go          ← Your Go code
-├── go.mod
-├── dist/mylib       ← Generated binary
-└── client.go        ← Generated Go client
+│   └── functions.py     ← @gorunpy.export functions
+├── main.go              ← //go:generate gorunpy gen
+├── gorunpy_client.go    ← Generated Go client (with embedded binary)
+└── .gorunpy/            ← Hidden build artifacts
+    └── mylib            ← Compiled binary
 ```
+
+## What `gorunpy gen` does
+
+1. Auto-detects `mylib/` (has `@gorunpy.export`)
+2. Builds binary → `.gorunpy/mylib`
+3. Generates `gorunpy_client.go` with:
+   - `//go:embed` directive
+   - `NewClient()` function
+   - Type-safe method wrappers
