@@ -187,9 +187,9 @@ def build_binary(module_dir: Path, output_dir: Path, name: Optional[str] = None)
     ]
     for f in exported_files:
         hidden_imports.extend(["--hidden-import", f"{module_name}.{f.stem}"])
-    
+
     print(f"Building {module_name}...")
-    
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile", "--noconfirm",
@@ -202,7 +202,7 @@ def build_binary(module_dir: Path, output_dir: Path, name: Optional[str] = None)
         "--log-level", "WARN",
         str(entry_point),
     ]
-    
+
     result = subprocess.run(cmd)
     if result.returncode != 0:
         print("Error: Build failed", file=sys.stderr)
@@ -225,7 +225,7 @@ def introspect_binary(binary_path: Path) -> List[Dict[str, Any]]:
     if proc.returncode != 0:
         print(f"Error: Introspection failed: {proc.stderr}", file=sys.stderr)
         sys.exit(1)
-    
+
     data = json.loads(proc.stdout)
     functions = data.get("result", {}).get("value", {}).get("functions", [])
     
@@ -299,10 +299,14 @@ def generate_go_client(
     functions: List[Dict[str, Any]],
     package_name: str,
     binary_path: str,
+    module_name: str,
     module_path: str = "github.com/younseoryu/gorunpy/gorunpy",
     embed: bool = True,
 ) -> str:
     """Generate Go client code."""
+    # Convert module name to PascalCase for Go naming
+    client_name = to_go_name(module_name) + "Client"
+    
     lines = [f"package {package_name}", ""]
     
     # Imports
@@ -339,23 +343,23 @@ def generate_go_client(
         lines.append("")
     
     # Client struct
-    lines.append("type Client struct {")
+    lines.append(f"type {client_name} struct {{")
     lines.append("\t*gorunpy.Client")
     lines.append("}")
     lines.append("")
     
     # NewClient function
     if embed:
-        lines.append("func NewClient() *Client {")
-        lines.append("\treturn &Client{Client: gorunpy.NewClient(extractedBinaryPath)}")
+        lines.append(f"func New{client_name}() *{client_name} {{")
+        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(extractedBinaryPath)}}")
         lines.append("}")
         lines.append("")
-        lines.append("func NewClientWithPath(binaryPath string) *Client {")
-        lines.append("\treturn &Client{Client: gorunpy.NewClient(binaryPath)}")
+        lines.append(f"func New{client_name}WithPath(binaryPath string) *{client_name} {{")
+        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(binaryPath)}}")
         lines.append("}")
     else:
-        lines.append("func NewClient(binaryPath string) *Client {")
-        lines.append("\treturn &Client{Client: gorunpy.NewClient(binaryPath)}")
+        lines.append(f"func New{client_name}(binaryPath string) *{client_name} {{")
+        lines.append(f"\treturn &{client_name}{{Client: gorunpy.NewClient(binaryPath)}}")
         lines.append("}")
     lines.append("")
     
@@ -386,7 +390,7 @@ def generate_go_client(
             ret_part = "error"
         
         # Function signature
-        lines.append(f"func (c *Client) {go_name}({', '.join(param_parts)}) {ret_part} {{")
+        lines.append(f"func (c *{client_name}) {go_name}({', '.join(param_parts)}) {ret_part} {{")
         
         # Args map
         args_parts = []
@@ -480,6 +484,7 @@ def gen(
         functions=functions,
         package_name=go_package,
         binary_path=str(relative_binary),
+        module_name=module_name,
         embed=not no_embed,
     )
     
@@ -488,11 +493,12 @@ def gen(
     client_file.write_text(client_code)
     print(f"Generated: {client_file}")
     
+    client_type = to_go_name(module_name) + "Client"
     print("\nDone! Usage:")
     if no_embed:
-        print(f'  client := NewClient("{relative_binary}")')
+        print(f'  client := New{client_type}("{relative_binary}")')
     else:
-        print("  client := NewClient()")
+        print(f"  client := New{client_type}()")
     print("  result, err := client.YourFunction(ctx, args...)")
 
 
@@ -526,8 +532,8 @@ def list_cmd(binary: str):
     """List functions in a binary."""
     functions = introspect_binary(Path(binary))
     for f in functions:
-        params = ", ".join(f"{k}: {v}" for k, v in f["parameters"].items())
-        print(f"{f['name']}({params}) -> {f['return_type']}")
+            params = ", ".join(f"{k}: {v}" for k, v in f["parameters"].items())
+            print(f"{f['name']}({params}) -> {f['return_type']}")
 
 
 def main():
@@ -550,19 +556,19 @@ def main():
     b.add_argument("module")
     b.add_argument("-o", "--output", default="./dist")
     b.add_argument("-n", "--name")
-    
+
     # Legacy: list
     l = sub.add_parser("list", help="List functions in a binary")
     l.add_argument("binary")
-    
+
     # Legacy: run
     r = sub.add_parser("run", help="Run a function in a binary")
     r.add_argument("binary")
     r.add_argument("function")
     r.add_argument("args", nargs="?", default="{}")
-    
+
     args = parser.parse_args()
-    
+
     # Default to gen if no command specified
     if args.cmd is None or args.cmd == "gen":
         gen(

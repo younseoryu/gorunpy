@@ -12,7 +12,7 @@ def sum(a: int, b: int) -> int:
 ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 defer cancel()
 
-client := NewClient()
+client := NewMylibClient()
 result, err := client.Sum(ctx, 1, 2)
 if err != nil {
     log.Fatal(err)
@@ -90,7 +90,7 @@ import (
 )
 
 func main() {
-	client := NewClient()
+	client := NewMylibClient()
 	result, _ := client.Sum(context.Background(), 1, 2)
 	fmt.Println(result) // 3
 }
