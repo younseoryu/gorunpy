@@ -1,7 +1,10 @@
 # GoRunPy
 
-Embed Python's ML, AI, and data science ecosystem into your Go binary with type-safe bindings. No CGO, no shared libraries, no Python runtime required.
-GoRunPy is ideal when you need Python libraries but don't want to manage a separate Python service. Not ideal for High-frequency, low-latency calls — Use gRPC with a persistent Python service instead.
+Embed Python’s ML, AI, and data-science ecosystem directly into your Go binary with type-safe bindings. No CGO, no shared libraries, no Python runtime required.
+
+GoRunPy is ideal when you want to have Go as your primary system language but you want to call into Python for AI/ML or data workloads without operating a separate Python service. It’s designed for workloads where Python does meaningful work and sub-second call latency is acceptable.
+
+It’s not intended for high-frequency, ultra-low-latency RPC. For those cases, use gRPC with a separate Python service instead.
 
 ```python
 @gorunpy.export
