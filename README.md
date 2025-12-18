@@ -11,37 +11,39 @@ result, _ := client.Sum(ctx, 1, 2)  // calls Python, returns 3
 
 **1. Create project:**
 ```bash
-mkdir myproject && cd myproject
-go mod init myproject
+mkdir myproject && cd myproject   # Create and enter project directory
+go mod init myproject             # Initialize Go module
 ```
 
 **2. Set up Python environment:**
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install "gorunpy[build]"
-go get github.com/younseoryu/gorunpy/gorunpy
+python3 -m venv venv              # Create virtual environment
+source venv/bin/activate          # Activate it
+pip install "gorunpy[build]"      # Install gorunpy with build dependencies
+go get github.com/younseoryu/gorunpy/gorunpy   # Add Go dependency
 ```
 
 > **Note:** Keep the venv activated when running `go generate` — it needs the `gorunpy` CLI.
 
-**3. Write Python** (`mylib/functions.py`):
+**3. Write Python:**
 ```bash
-mkdir mylib && touch mylib/__init__.py
+mkdir mylib && touch mylib/__init__.py   # Create Python package
 ```
 
-```python
-# mylib/functions.py
+```bash
+cat > mylib/functions.py << 'EOF'        # Create functions file
 import gorunpy
 
-@gorunpy.export
+@gorunpy.export                          # Mark function as callable from Go
 def sum(a: int, b: int) -> int:
     return a + b
+EOF
 ```
 
-**4. Write Go** (`main.go`):
-```go
-//go:generate gorunpy gen
+**4. Write Go:**
+```bash
+cat > main.go << 'EOF'
+//go:generate gorunpy gen                # Auto-detect, build, and generate client
 
 package main
 
@@ -51,20 +53,21 @@ import (
 )
 
 func main() {
-	client := NewClient()
-	result, _ := client.Sum(context.Background(), 1, 2)
-	fmt.Println(result)  // 3
+	client := NewClient()                                // Create client (uses embedded binary)
+	result, _ := client.Sum(context.Background(), 1, 2)  // Call Python function
+	fmt.Println(result)                                  // 3
 }
+EOF
 ```
 
 **5. Run:**
 ```bash
-go generate
-go run .
+go generate    # Builds Python binary + generates gorunpy_client.go
+go run .       # Run the program
 ```
 
 That's it! The `gorunpy gen` command:
-- ✅ Auto-detects your Python module
+- ✅ Auto-detects your Python module (searches up to 3 levels up/down)
 - ✅ Auto-generates `__main__.py` if missing
 - ✅ Builds the Python binary (hidden in `.gorunpy/`)
 - ✅ Generates `gorunpy_client.go` with embedded binary
@@ -74,7 +77,7 @@ That's it! The `gorunpy gen` command:
 
 ### Specify module path
 ```bash
-gorunpy gen ./path/to/mylib
+gorunpy gen ./path/to/mylib    # Use specific module instead of auto-detect
 ```
 
 ### Custom output locations
@@ -84,17 +87,17 @@ gorunpy gen --output ./bin --client ./pkg/client.go
 
 ### Without embedding (separate binary)
 ```bash
-gorunpy gen --no-embed
+gorunpy gen --no-embed         # Binary not embedded, must distribute separately
 ```
 
 ### List functions in a binary
 ```bash
-gorunpy list .gorunpy/mylib
+gorunpy list .gorunpy/mylib    # Show available functions and signatures
 ```
 
 ### Run a function directly
 ```bash
-gorunpy run .gorunpy/mylib sum '{"a": 1, "b": 2}'
+gorunpy run .gorunpy/mylib sum '{"a": 1, "b": 2}'   # Test without Go
 ```
 
 ## How It Works
