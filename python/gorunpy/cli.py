@@ -308,7 +308,7 @@ def generate_go_client(
     # Imports
     imports = ['"context"']
     if embed:
-        imports.insert(0, '"embed"')
+        imports.append('_ "embed"')  # Required for //go:embed directive
         imports.append('"os"')
         imports.append('"path/filepath"')
     imports.append(f'"{module_path}"')
