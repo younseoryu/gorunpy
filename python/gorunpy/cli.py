@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,9 +18,6 @@ def build(module_path: str, output_dir: str, name: str = None):
         print(f"Error: {entry_point} not found", file=sys.stderr)
         sys.exit(1)
 
-    import gorunpy
-    gorunpy_path = Path(gorunpy.__file__).parent.parent
-
     out = Path(output_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
 
@@ -32,11 +28,9 @@ def build(module_path: str, output_dir: str, name: str = None):
         "--onefile", "--noconfirm",
         "--name", module_name,
         "--paths", str(module.parent),
-        "--paths", str(gorunpy_path),
         "--distpath", str(out),
         "--workpath", str(out / ".build"),
         "--specpath", str(out / ".build"),
-        "--collect-all", "gorunpy",
         "--hidden-import", "gorunpy",
         "--hidden-import", module_name,
         "--hidden-import", f"{module_name}.functions",
