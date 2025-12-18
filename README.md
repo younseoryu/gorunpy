@@ -153,6 +153,21 @@ Write Go client to `./pkg/client.go` instead of `gorunpy_client.go`:
 3. **Introspection** — Extracts function signatures
 4. **Generation** — Creates type-safe Go client with `//go:embed`
 
+## Comparison
+|                     | GoRunPy                  | gRPC / HTTP           | CGO bindings        |
+|---------------------|--------------------------|-----------------------|---------------------|
+| Deployment          | Single binary            | Separate services     | Single binary       |
+| CGO Required        | ❌ No                     | ❌ No                  | ✅ Yes              |
+| Python Runtime      | Bundled (out-of-process) | Required (service)    | Embedded (in-proc)  |
+| Cross-compilation   | ✅ Easy                   | ✅ Easy                | ❌ Hard             |
+| Typical Latency     | ~200–500 ms              | ~1–10 ms              | ~µs-level           |
+| Throughput          | Low–Medium               | High                  | Very High           |
+| Process Isolation   | ✅ Full                   | ✅ Full                | ❌ Shared memory    |
+| Crash Isolation     | ✅ Python crash isolated  | ✅ Isolated            | ❌ Brings down Go   |
+| Memory Overhead     | Higher (extra process)   | Higher (extra service)| Lower (shared)      |
+| Operational Complexity | Low                      | Medium–High           | High                |
+| Best For            | ML, AI, batch jobs       | High-QPS services     | Ultra-low latency   |
+
 ## License
 
 MIT
