@@ -7,4 +7,3 @@ venv/
 dist/
 .gorunpy/
 gorunpy_client.go
-example/client.go

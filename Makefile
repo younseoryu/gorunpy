@@ -1,11 +1,7 @@
-.PHONY: test example clean
+.PHONY: test clean
 
 test:
-	cd example && make generate
 	go test -v ./gorunpy/...
 
-example:
-	cd example && make generate && make run
-
 clean:
-	cd example && make clean
+	rm -rf .gorunpy gorunpy_client.go
