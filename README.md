@@ -131,3 +131,8 @@ GoRunPy is ideal when you need Python libraries but don't want to manage a separ
 ## License
 
 MIT
+
+## TODO
+1. clean up code
+2. make it more convenient (a bit more opinionated?)
+3. Better comments
