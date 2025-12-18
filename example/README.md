@@ -1,18 +1,33 @@
-# GoRunPy Example
+# Example
+
+```
+example/
+├── py/              ← Python code
+│   └── functions.py
+├── py               ← Built binary (generated)
+├── client.go        ← Go client (generated)
+└── main.go          ← Your Go code
+```
+
+## Setup
 
 ```bash
-pip install -e ../python[build]
+python3 -m venv venv
+source venv/bin/activate
+pip install -e "../python[build]"
+```
 
-make build
-make generate
-make run
+## Run
+
+```bash
+go generate
+go run .
 ```
 
 Output:
 ```
 1 + 2 = 3
-3.5 * 2.0 = 7.0
 Hello, World!
-mean([1,2,3,4,5]) = 3.0
+mean = 3.0
 Error: division by zero
 ```

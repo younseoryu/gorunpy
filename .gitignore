@@ -1,13 +1,10 @@
 __pycache__/
 *.py[cod]
-dist/
-build/
 *.egg-info/
-.pytest_cache/
 venv/
 .venv/
-*.exe
-*.test
-*.out
-example/dist/
-example/go/mathlib/client.go
+.build/
+
+# Example generated files
+example/py
+example/client.go
