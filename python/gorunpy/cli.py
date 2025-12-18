@@ -29,7 +29,8 @@ def build(module_path: str, output_dir: str, name: str = None):
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--onefile", "--name", module_name,
+        "--onefile", "--noconfirm",
+        "--name", module_name,
         "--paths", str(module.parent),
         "--paths", str(gorunpy_path),
         "--distpath", str(out),

@@ -1,0 +1,7 @@
+venv/
+dist/
+.build/
+client.go
+go.sum
+__pycache__/
+

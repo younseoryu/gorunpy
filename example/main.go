@@ -1,5 +1,5 @@
-//go:generate gorunpy build py -o .
-//go:generate go run github.com/younseoryu/gorunpy/cmd/gorunpy-gen -binary py -package main -output client.go
+//go:generate gorunpy build mylib -o dist
+//go:generate go run github.com/younseoryu/gorunpy/cmd/gorunpy-gen -binary dist/mylib -package main -output client.go
 
 package main
 
@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	client := NewClient("./py")
+	client := NewClient("./dist/mylib")
 	ctx := context.Background()
 
 	sum, _ := client.Sum(ctx, 1, 2)
@@ -26,7 +26,7 @@ func main() {
 
 	_, err := client.Divide(ctx, 10, 0)
 	if err != nil {
-		var e *gorunpy.ErrInvalidInput
+		var e *gorunpy.ErrValidation
 		if errors.As(err, &e) {
 			fmt.Printf("Error: %s\n", e.Message)
 		}
