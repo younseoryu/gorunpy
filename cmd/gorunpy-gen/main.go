@@ -1,11 +1,3 @@
-// Command gorunpy-gen generates typed Go client code from Python function signatures.
-//
-// Usage:
-//
-//	gorunpy-gen -binary ./dist/myapp -package myapp -output client.go
-//
-// This will introspect the Python executable and generate typed Go wrappers
-// for all exported functions.
 package main
 
 import (
@@ -21,177 +13,107 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	"unicode"
 )
 
 var (
 	binaryPath  = flag.String("binary", "", "Path to Python executable")
 	packageName = flag.String("package", "main", "Go package name")
 	outputFile  = flag.String("output", "", "Output file (default: stdout)")
-	modulePath  = flag.String("module", "github.com/younseoryu/gorunpy/gorunpy", "GoRunPy module import path")
+	modulePath  = flag.String("module", "github.com/younseoryu/gorunpy/gorunpy", "GoRunPy module path")
 )
 
-// FunctionInfo represents metadata about an exported Python function.
 type FunctionInfo struct {
 	Name       string            `json:"name"`
-	Parameters map[string]string `json:"parameters"` // name -> type
+	Parameters map[string]string `json:"parameters"`
 	ReturnType string            `json:"return_type"`
 }
 
-// ParamInfo for ordered parameters
 type ParamInfo struct {
-	Name   string
-	GoName string
-	GoType string
-	PyType string
-}
-
-// IntrospectResponse is the response from the __introspect__ call.
-type IntrospectResponse struct {
-	OK     bool `json:"ok"`
-	Result struct {
-		Value struct {
-			Functions []FunctionInfo `json:"functions"`
-		} `json:"value"`
-	} `json:"result"`
+	Name, GoName, GoType string
 }
 
 func main() {
 	flag.Parse()
-
 	if *binaryPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: -binary is required")
-		flag.Usage()
+		fmt.Fprintln(os.Stderr, "Error: -binary required")
 		os.Exit(1)
 	}
 
-	// Introspect the Python executable
 	functions, err := introspect(*binaryPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error introspecting binary: %v\n", err)
-		fmt.Fprintln(os.Stderr, "Note: The Python executable must support the __introspect__ function.")
-		fmt.Fprintln(os.Stderr, "Make sure you're using gorunpy Python SDK.")
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Filter out internal functions
-	var publicFunctions []FunctionInfo
+	var publicFuncs []FunctionInfo
 	for _, f := range functions {
 		if !strings.HasPrefix(f.Name, "_") {
-			publicFunctions = append(publicFunctions, f)
+			publicFuncs = append(publicFuncs, f)
 		}
 	}
 
-	// Generate code
-	code, err := generateCode(*packageName, *modulePath, publicFunctions)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating code: %v\n", err)
-		os.Exit(1)
-	}
+	code, _ := generateCode(*packageName, *modulePath, publicFuncs)
 
-	// Output
 	if *outputFile != "" {
-		if err := os.WriteFile(*outputFile, []byte(code), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "Generated %s with %d functions\n", *outputFile, len(publicFunctions))
+		os.WriteFile(*outputFile, []byte(code), 0644)
+		fmt.Fprintf(os.Stderr, "Generated %s\n", *outputFile)
 	} else {
 		fmt.Print(code)
 	}
 }
 
-func introspect(binaryPath string) ([]FunctionInfo, error) {
+func introspect(binary string) ([]FunctionInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	request := map[string]any{
-		"function": "__introspect__",
-		"args":     map[string]any{},
-	}
-
-	requestJSON, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := exec.CommandContext(ctx, binaryPath)
-	cmd.Stdin = bytes.NewReader(requestJSON)
-
+	reqJSON, _ := json.Marshal(map[string]any{"function": "__introspect__", "args": map[string]any{}})
+	cmd := exec.CommandContext(ctx, binary)
+	cmd.Stdin = bytes.NewReader(reqJSON)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to run binary: %v\nstderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
 
-	var resp IntrospectResponse
-	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %v\nstdout: %s", err, stdout.String())
+	var resp struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Value struct {
+				Functions []FunctionInfo `json:"functions"`
+			} `json:"value"`
+		} `json:"result"`
 	}
-
-	if !resp.OK {
-		return nil, fmt.Errorf("introspection failed")
-	}
-
+	json.Unmarshal(stdout.Bytes(), &resp)
 	return resp.Result.Value.Functions, nil
 }
 
-func generateCode(pkg, modulePath string, functions []FunctionInfo) (string, error) {
-	funcMap := template.FuncMap{
-		"goName":       toGoName,
-		"goType":       pythonTypeToGo,
-		"isSimpleType": isSimpleReturnType,
-		"needsPointer": needsPointerReturn,
-		"zeroValue":    goZeroValue,
-		"getParams":    getOrderedParams,
-		"hasParams":    func(f FunctionInfo) bool { return len(f.Parameters) > 0 },
-	}
-
-	tmpl := template.Must(template.New("client").Funcs(funcMap).Parse(clientTemplate))
+func generateCode(pkg, mod string, funcs []FunctionInfo) (string, error) {
+	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
+		"goName":    toGoName,
+		"goType":    pyTypeToGo,
+		"zeroValue": goZero,
+		"getParams": getParams,
+	}).Parse(tmplStr))
 
 	var buf bytes.Buffer
-	data := struct {
-		Package    string
-		ModulePath string
-		Functions  []FunctionInfo
-	}{
-		Package:    pkg,
-		ModulePath: modulePath,
-		Functions:  functions,
-	}
-
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", err
-	}
-
-	// Format the code
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		// Return unformatted if formatting fails (for debugging)
-		return buf.String(), nil
-	}
-
+	tmpl.Execute(&buf, map[string]any{"Package": pkg, "Module": mod, "Functions": funcs})
+	formatted, _ := format.Source(buf.Bytes())
 	return string(formatted), nil
 }
 
-func toGoName(name string) string {
-	parts := strings.Split(name, "_")
-	var result strings.Builder
-	for _, part := range parts {
-		if len(part) > 0 {
-			result.WriteString(strings.ToUpper(string(part[0])))
-			result.WriteString(part[1:])
+func toGoName(s string) string {
+	var b strings.Builder
+	for _, p := range strings.Split(s, "_") {
+		if len(p) > 0 {
+			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
 		}
 	}
-	return result.String()
+	return b.String()
 }
 
-func pythonTypeToGo(pyType string) string {
-	pyType = strings.TrimSpace(pyType)
-
-	switch pyType {
+func pyTypeToGo(t string) string {
+	switch t {
 	case "int":
 		return "int"
 	case "float":
@@ -202,61 +124,21 @@ func pythonTypeToGo(pyType string) string {
 		return "bool"
 	case "None", "NoneType":
 		return ""
-	case "Any", "any":
-		return "any"
 	}
-
-	// List[T]
-	if strings.HasPrefix(pyType, "List[") || strings.HasPrefix(pyType, "list[") {
-		inner := pyType[5 : len(pyType)-1]
-		return "[]" + pythonTypeToGo(inner)
+	if strings.HasPrefix(t, "List[") {
+		return "[]" + pyTypeToGo(t[5:len(t)-1])
 	}
-
-	// Dict[str, T]
-	if strings.HasPrefix(pyType, "Dict[") || strings.HasPrefix(pyType, "dict[") {
-		inner := pyType[5 : len(pyType)-1]
-		parts := splitTypeArgs(inner)
-		if len(parts) == 2 {
-			return "map[" + pythonTypeToGo(parts[0]) + "]" + pythonTypeToGo(parts[1])
-		}
-		return "map[string]any"
+	if strings.HasPrefix(t, "Dict[") {
+		return "map[string]" + pyTypeToGo(strings.Split(t[5:len(t)-1], ", ")[1])
 	}
-
-	// Optional[T]
-	if strings.HasPrefix(pyType, "Optional[") {
-		inner := pyType[9 : len(pyType)-1]
-		return "*" + pythonTypeToGo(inner)
+	if strings.HasPrefix(t, "Optional[") {
+		return "*" + pyTypeToGo(t[9:len(t)-1])
 	}
-
-	// Union - just use any for now
-	if strings.HasPrefix(pyType, "Union[") {
-		return "any"
-	}
-
 	return "any"
 }
 
-func isSimpleReturnType(pyType string) bool {
-	goType := pythonTypeToGo(pyType)
-	switch goType {
-	case "int", "float64", "string", "bool", "any", "":
-		return true
-	}
-	if strings.HasPrefix(goType, "[]") {
-		return true
-	}
-	return false
-}
-
-func needsPointerReturn(pyType string) bool {
-	goType := pythonTypeToGo(pyType)
-	// Complex types like maps and structs should be returned as pointers
-	return strings.HasPrefix(goType, "map[")
-}
-
-func goZeroValue(pyType string) string {
-	goType := pythonTypeToGo(pyType)
-	switch goType {
+func goZero(t string) string {
+	switch pyTypeToGo(t) {
 	case "int":
 		return "0"
 	case "float64":
@@ -267,139 +149,41 @@ func goZeroValue(pyType string) string {
 		return "false"
 	case "":
 		return ""
-	default:
-		return "nil"
 	}
+	return "nil"
 }
 
-func getOrderedParams(f FunctionInfo) []ParamInfo {
-	var params []ParamInfo
-	for name, pyType := range f.Parameters {
-		params = append(params, ParamInfo{
-			Name:   name,
-			GoName: toGoParamName(name),
-			GoType: pythonTypeToGo(pyType),
-			PyType: pyType,
-		})
+func getParams(f FunctionInfo) []ParamInfo {
+	var ps []ParamInfo
+	for n, t := range f.Parameters {
+		gn := strings.ToLower(n[:1]) + n[1:]
+		ps = append(ps, ParamInfo{n, gn, pyTypeToGo(t)})
 	}
-	// Sort alphabetically for consistent output
-	sort.Slice(params, func(i, j int) bool {
-		return params[i].Name < params[j].Name
-	})
-	return params
+	sort.Slice(ps, func(i, j int) bool { return ps[i].Name < ps[j].Name })
+	return ps
 }
 
-func toGoParamName(name string) string {
-	// Convert snake_case to camelCase for parameters
-	parts := strings.Split(name, "_")
-	var result strings.Builder
-	for i, part := range parts {
-		if len(part) > 0 {
-			if i == 0 {
-				result.WriteString(strings.ToLower(part))
-			} else {
-				result.WriteString(strings.ToUpper(string(part[0])))
-				result.WriteString(part[1:])
-			}
-		}
-	}
-	s := result.String()
-	// Handle reserved words
-	if isGoReserved(s) {
-		return s + "_"
-	}
-	return s
-}
-
-func isGoReserved(s string) bool {
-	reserved := map[string]bool{
-		"break": true, "case": true, "chan": true, "const": true, "continue": true,
-		"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
-		"func": true, "go": true, "goto": true, "if": true, "import": true,
-		"interface": true, "map": true, "package": true, "range": true, "return": true,
-		"select": true, "struct": true, "switch": true, "type": true, "var": true,
-	}
-	return reserved[s]
-}
-
-func splitTypeArgs(s string) []string {
-	var result []string
-	var current strings.Builder
-	depth := 0
-
-	for _, r := range s {
-		switch r {
-		case '[':
-			depth++
-			current.WriteRune(r)
-		case ']':
-			depth--
-			current.WriteRune(r)
-		case ',':
-			if depth == 0 {
-				result = append(result, strings.TrimSpace(current.String()))
-				current.Reset()
-			} else {
-				current.WriteRune(r)
-			}
-		default:
-			if !unicode.IsSpace(r) || current.Len() > 0 {
-				current.WriteRune(r)
-			}
-		}
-	}
-
-	if current.Len() > 0 {
-		result = append(result, strings.TrimSpace(current.String()))
-	}
-
-	return result
-}
-
-const clientTemplate = `// Code generated by gorunpy-gen. DO NOT EDIT.
-
-package {{.Package}}
+const tmplStr = `package {{.Package}}
 
 import (
 	"context"
-
-	"{{.ModulePath}}"
+	"{{.Module}}"
 )
 
-// Client provides typed methods for calling Python functions.
 type Client struct {
 	*gorunpy.Client
 }
 
-// NewClient creates a new Client for the Python executable at binaryPath.
 func NewClient(binaryPath string) *Client {
 	return &Client{Client: gorunpy.NewClient(binaryPath)}
 }
-
-{{range .Functions}}
-{{$params := getParams .}}
-{{$goName := goName .Name}}
-{{$returnType := goType .ReturnType}}
-{{$isSimple := isSimpleType .ReturnType}}
-{{$needsPtr := needsPointer .ReturnType}}
-{{$zero := zeroValue .ReturnType}}
-// {{$goName}} calls the Python function "{{.Name}}".
-{{if eq $returnType ""}}func (c *Client) {{$goName}}(ctx context.Context{{range $params}}, {{.GoName}} {{.GoType}}{{end}}) error {
-{{else if $needsPtr}}func (c *Client) {{$goName}}(ctx context.Context{{range $params}}, {{.GoName}} {{.GoType}}{{end}}) ({{$returnType}}, error) {
-{{else}}func (c *Client) {{$goName}}(ctx context.Context{{range $params}}, {{.GoName}} {{.GoType}}{{end}}) ({{$returnType}}, error) {
-{{end}}	args := map[string]any{
-{{- range $params}}
-		"{{.Name}}": {{.GoName}},
-{{- end}}
-	}
-{{if eq $returnType ""}}
-	return c.Call(ctx, "{{.Name}}", args, nil)
-{{else}}
-	var result {{$returnType}}
+{{range .Functions}}{{$ps := getParams .}}{{$ret := goType .ReturnType}}{{$zero := zeroValue .ReturnType}}
+func (c *Client) {{goName .Name}}(ctx context.Context{{range $ps}}, {{.GoName}} {{.GoType}}{{end}}) ({{if $ret}}{{$ret}}, {{end}}error) {
+	args := map[string]any{ {{range $ps}}"{{.Name}}": {{.GoName}},{{end}} }
+{{if $ret}}	var result {{$ret}}
 	if err := c.Call(ctx, "{{.Name}}", args, &result); err != nil {
 		return {{$zero}}, err
 	}
-	return result, nil
-{{end}}}
-{{end}}
-`
+	return result, nil{{else}}	return c.Call(ctx, "{{.Name}}", args, nil){{end}}
+}
+{{end}}`
